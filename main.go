@@ -34,7 +34,6 @@ func (TimeWorker) Handle()  {
 func (routinesCloser RoutinesCloser) Handle()  {
 	fmt.Println("Close all routines")
 	//close(routinesCloser.stopQ)
-	defer
 }
 
 func (Exit) Handle() {
