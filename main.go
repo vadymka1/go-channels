@@ -22,7 +22,7 @@ type FileReadWork struct {
 type Exit struct {}
 
 type RoutinesCloser struct {
-	stopQ chan Worker
+	//stopQ chan Worker
 }
 
 type TimeOutWorker struct {}
@@ -65,7 +65,12 @@ func (TimeOutWorker) Handle() {
 
 func worker(wg *sync.WaitGroup, taskQ chan Worker) {
 	for task := range taskQ {
+		//structName := reflect.TypeOf(task)
+
 		task.Handle()
+		//if structName.Name() == "RoutinesCloser" {
+		//	close(taskQ)
+		//}
 		wg.Done()
 	}
 }
@@ -84,21 +89,23 @@ func main()  {
 	tasks := []Worker {
 		TimeWorker{},
 		fileData,
-		//RoutinesCloser{workQ},
+		RoutinesCloser{},
 		Exit{},
 		TimeOutWorker{},
 
 	}
+
 	fmt.Println(len(tasks))
 	go worker(&wg, workQ)
 
 	for _, task := range tasks {
 		wg.Add(1)
 		workQ <- task
+
 	}
 
 	wg.Wait()
-	fmt.Println("Never reach this ")
+	close(workQ)
 }
 
 func check (e error) {
@@ -106,3 +113,4 @@ func check (e error) {
 		panic(e)
 	}
 }
+
