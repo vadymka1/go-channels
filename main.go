@@ -22,7 +22,7 @@ type FileReadWork struct {
 type Exit struct {}
 
 type RoutinesCloser struct {
-	//stopQ chan Worker
+	stopQ chan bool
 }
 
 type TimeOutWorker struct {}
@@ -33,7 +33,7 @@ func (TimeWorker) Handle()  {
 
 func (routinesCloser RoutinesCloser) Handle()  {
 	fmt.Println("Close all routines")
-	//close(routinesCloser.stopQ)
+	//<-routinesCloser.stopQ
 }
 
 func (Exit) Handle() {
@@ -67,9 +67,11 @@ func worker(wg *sync.WaitGroup, taskQ chan Worker) {
 	for task := range taskQ {
 		//structName := reflect.TypeOf(task)
 
+
 		task.Handle()
 		//if structName.Name() == "RoutinesCloser" {
-		//	close(taskQ)
+		//	taskQ <- task
+		//	//close(taskQ)
 		//}
 		wg.Done()
 	}
@@ -80,6 +82,9 @@ func main()  {
 	var wg sync.WaitGroup
 
 	workQ := make(chan Worker)
+	done := make(chan bool)
+
+	routinesCloser := RoutinesCloser{done}
 
 	fileData := FileReadWork{
 		fileName: fake.Word(),
@@ -89,7 +94,8 @@ func main()  {
 	tasks := []Worker {
 		TimeWorker{},
 		fileData,
-		RoutinesCloser{},
+		routinesCloser,
+		//RoutinesCloser{},
 		Exit{},
 		TimeOutWorker{},
 
@@ -99,6 +105,7 @@ func main()  {
 	go worker(&wg, workQ)
 
 	for _, task := range tasks {
+
 		wg.Add(1)
 		workQ <- task
 
