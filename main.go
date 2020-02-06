@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/icrowley/fake"
 	"os"
@@ -8,40 +9,25 @@ import (
 	"time"
 )
 
+var done chan bool
+
 type Worker interface {
-	Handle()
+	Handle(ctx context.Context)
 }
 
 type TimeWorker struct {}
+
+func (TimeWorker) Handle(ctx context.Context)  {
+	fmt.Println("Current time file routine")
+	fmt.Println(time.Now())
+}
 
 type FileReadWork struct {
 	fileName string
 	data string
 }
 
-type Exit struct {}
-
-type RoutinesCloser struct {
-	stopQ chan bool
-}
-
-type TimeOutWorker struct {}
-
-func (TimeWorker) Handle()  {
-	fmt.Println(time.Now())
-}
-
-func (routinesCloser RoutinesCloser) Handle()  {
-	fmt.Println("Close all routines")
-	//<-routinesCloser.stopQ
-}
-
-func (Exit) Handle() {
-	fmt.Println("exitWorker is in progress")
-	os.Exit(1)
-}
-
-func (frw FileReadWork) Handle()  {
+func (frw FileReadWork) Handle(ctx context.Context)  {
 	fmt.Println("Read and write file routine")
 
 	filePath := "./files/" + frw.fileName + time.Now().Format("2006.01.02 15:04:05")
@@ -55,26 +41,51 @@ func (frw FileReadWork) Handle()  {
 	f.Close()
 }
 
-func (TimeOutWorker) Handle() {
-	fmt.Println("timeOutWorker is in progress")
-	TimeWorker{}.Handle()
+type Exit struct {}
+
+func (Exit) Handle(ctx context.Context) {
+	fmt.Println("exitWorker is in progress")
+	os.Exit(1)
+}
+
+type RoutinesCloser struct {}
+
+func (routinesCloser RoutinesCloser) Handle(ctx context.Context) {
+
+	fmt.Println("RoutinesCloser is in progress")
+	ctx, cancel := context.WithCancel(ctx)
+
+	cancel()
+
+	select {
+	case <-ctx.Done():
+		fmt.Println("Gracefully exit")
+		fmt.Println(ctx.Err())
+		return
+	default:
+	}
+
+}
+
+type TimeOutWorker struct {}
+
+func (TimeOutWorker) Handle(ctx context.Context) {
+	fmt.Println("Time Out Worker file routine")
+	fmt.Println(time.Now())
 	time.Sleep(time.Second)
-	TimeWorker{}.Handle()
+	fmt.Println(time.Now())
 
 }
 
 func worker(wg *sync.WaitGroup, taskQ chan Worker) {
+
+	ctx := context.Background()
+
 	for task := range taskQ {
-		//structName := reflect.TypeOf(task)
-
-
-		task.Handle()
-		//if structName.Name() == "RoutinesCloser" {
-		//	taskQ <- task
-		//	//close(taskQ)
-		//}
+		task.Handle(ctx)
 		wg.Done()
 	}
+
 }
 
 func main()  {
@@ -82,9 +93,6 @@ func main()  {
 	var wg sync.WaitGroup
 
 	workQ := make(chan Worker)
-	done := make(chan bool)
-
-	routinesCloser := RoutinesCloser{done}
 
 	fileData := FileReadWork{
 		fileName: fake.Word(),
@@ -94,14 +102,14 @@ func main()  {
 	tasks := []Worker {
 		TimeWorker{},
 		fileData,
-		routinesCloser,
-		//RoutinesCloser{},
-		Exit{},
+		RoutinesCloser{},
+		//Exit{},
 		TimeOutWorker{},
 
 	}
 
 	fmt.Println(len(tasks))
+
 	go worker(&wg, workQ)
 
 	for _, task := range tasks {
